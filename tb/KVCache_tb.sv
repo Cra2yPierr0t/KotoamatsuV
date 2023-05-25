@@ -73,7 +73,7 @@ module KVCache_tb;
     i_fetch_data[1] = 32'h5555_0000;
     i_fetch_data[2] = 32'h5555_5555;
     i_fetch_data[3] = 32'h0505_0505;
-    #11
+    #10
     i_load_valid    = '1;
     i_load_addr     = 32'h1000_1000;
     i_load_ready    = '1;

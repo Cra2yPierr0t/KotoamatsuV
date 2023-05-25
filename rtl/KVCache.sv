@@ -72,44 +72,88 @@ module KVCache #(
   logic [WAY_NUM-1:0]           w_killmask;
   logic [WAY_NUM-1:0]           r_killmask = 1;
 
-  // Rename Signal
   logic [TAG_WIDTH-1:0]         w_tag;
   logic [INDEX_WIDTH-1:0]       w_index;
   logic [LINEOFFSET_WIDTH-1:0]  w_lineoffset;
+  logic [TAG_WIDTH-1:0]         r_tag;
+  logic [INDEX_WIDTH-1:0]       r_index;
+  logic [LINEOFFSET_WIDTH-1:0]  r_lineoffset;
+
+  // Hit Check
+  // Rename Signal
   always_comb begin
-    w_tag           = i_load_addr[ADDR_WIDTH-1:ADDR_WIDTH-TAG_WIDTH];
-    w_index         = i_load_addr[INDEX_WIDTH+LINEOFFSET_WIDTH-1:LINEOFFSET_WIDTH];
-    w_lineoffset    = i_load_addr[LINEOFFSET_WIDTH-1:0];
+    if(~o_fetch_valid | i_fetch_ready) begin
+      w_tag             = i_load_addr[ADDR_WIDTH-1:ADDR_WIDTH-TAG_WIDTH];
+      w_index           = i_load_addr[INDEX_WIDTH+LINEOFFSET_WIDTH-1:LINEOFFSET_WIDTH];
+      w_lineoffset      = i_load_addr[LINEOFFSET_WIDTH-1:0];
+    end else begin
+      w_tag             = r_tag;
+      w_index           = r_index;
+      w_lineoffset      = r_lineoffset;
+    end
+  end
+
+  always_ff @(posedge i_clk) begin
+    r_tag           <=  w_tag;
+    r_index         <=  w_index;
+    r_lineoffset    <=  w_lineoffset;
   end
 
   // Hit Check Logic
   generate 
     for(genvar way = 0; way < WAY_NUM; way = way + 1) begin : HIT_CHECK_LOGIC
       always_comb begin
-        w_hitway[way] = r_cache_valid[way][w_index] & (r_cache_tag[way][w_index] == w_tag);
+        if(~o_fetch_valid | i_fetch_ready) begin
+          w_hitway[way] = r_cache_valid[way][w_index] & (r_cache_tag[way][w_index] == w_tag);
+        end else begin
+          w_hitway[way] = r_hitway[way];
+        end
       end
     end
   endgenerate
-  assign w_miss = ~|w_hitway;
-
-  always_ff @(posedge i_clk) begin
-    r_hitway    <=  w_hitway;
-    r_miss      <=  w_miss;
+  always_comb begin
+    if(~o_fetch_valid | i_fetch_ready) begin
+      w_miss = ~|w_hitway;
+    end else begin
+      w_miss = r_miss;
+    end
   end
 
-  // Fetch Logic
+  always_ff @(posedge i_clk) begin
+    r_hitway        <=  w_hitway;
+    r_miss          <=  w_miss;
+  end
+
+  // Send Address to Address
+  always_comb begin
+    if((~o_fetch_valid | i_fetch_ready) && w_miss) begin
+      w_o_fetch_addr    = i_load_addr;
+      w_o_fetch_valid   = i_load_valid;
+    end else begin
+      w_o_fetch_valid   = o_fetch_valid;
+      w_o_fetch_addr    = o_fetch_addr;
+    end
+  end
+
+  always_ff @(posedge i_clk) begin
+    o_fetch_valid   <= w_o_fetch_valid;
+    o_fetch_addr    <= w_o_fetch_addr;
+  end
+
+
+  // Fetch
   // Store Data to Cache
   generate
     for(genvar way = 0; way < WAY_NUM; way = way + 1) begin : FETCH_LOGIC
       always_comb begin
-        if(w_miss && r_killmask[way] && i_fetch_valid) begin
-          w_cache_valid[way]    = 1'b1;
-          w_cache_tag[way]      = w_tag;
+        if(r_miss && r_killmask[way] && (~o_load_valid | i_load_ready)) begin
+          w_cache_valid[way]    = i_fetch_valid;
+          w_cache_tag[way]      = r_tag;
           w_cache_line[way]     = i_fetch_data;
         end else begin
-          w_cache_valid[way]    = r_cache_valid[way][w_index];
-          w_cache_tag[way]      = r_cache_tag[way][w_index];
-          w_cache_line[way]     = r_cache_line[way][w_index];
+          w_cache_valid[way]    = r_cache_valid[way][r_index];
+          w_cache_tag[way]      = r_cache_tag[way][r_index];
+          w_cache_line[way]     = r_cache_line[way][r_index];
         end
       end
     end
@@ -118,9 +162,9 @@ module KVCache #(
   generate
     for(genvar way = 0; way < WAY_NUM; way = way + 1) begin : FETCH_TO_CACHE
       always_ff @(posedge i_clk) begin
-        r_cache_valid[way][w_index] <= w_cache_valid[way];
-        r_cache_tag[way][w_index]   <= w_cache_tag[way];
-        r_cache_line[way][w_index]  <= w_cache_line[way];
+        r_cache_valid[way][r_index] <= w_cache_valid[way];
+        r_cache_tag[way][r_index]   <= w_cache_tag[way];
+        r_cache_line[way][r_index]  <= w_cache_line[way];
       end
     end
   endgenerate
@@ -129,7 +173,7 @@ module KVCache #(
   always_comb begin
     if(~o_load_valid | i_load_ready) begin
       if(r_miss) begin
-        w_o_load_data   = i_fetch_data[w_lineoffset];
+        w_o_load_data   = i_fetch_data[r_lineoffset];
         w_o_load_valid  = i_fetch_valid;
       end else begin
         w_o_load_data   = w_rdata;
@@ -146,21 +190,6 @@ module KVCache #(
     o_load_valid    <= w_o_load_valid;
   end
 
-  // Send Address to Cache
-  always_comb begin
-    if((~o_fetch_valid | i_fetch_ready) && r_miss) begin
-      w_o_fetch_valid   = i_load_valid;
-      w_o_fetch_addr    = i_load_addr;
-    end else begin
-      w_o_fetch_valid   = o_fetch_valid;
-      w_o_fetch_addr    = o_fetch_addr;
-    end
-  end
-
-  always_ff @(posedge i_clk) begin
-    o_fetch_valid   <= w_o_fetch_valid;
-    o_fetch_addr    <= w_o_fetch_addr;
-  end
   
   // Cache Algorithm
   generate 
@@ -183,7 +212,7 @@ module KVCache #(
   generate
     for(genvar way = 0; way < WAY_NUM; way = way + 1) begin : LOAD_LOGIC
       always_comb begin
-        w_rdataway[way] = r_cache_line[way][w_index][w_lineoffset];
+        w_rdataway[way] = r_cache_line[way][r_index][r_lineoffset];
       end
     end
   endgenerate
