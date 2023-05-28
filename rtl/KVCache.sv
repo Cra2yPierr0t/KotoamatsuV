@@ -42,6 +42,9 @@ module KVCache #(
   output logic [LINE_WIDTH-1:0] o_line_data
 );
 
+  logic                  w_i_load_valid;
+  logic                  r_i_load_valid;
+
   logic                  w_o_load_valid;
   logic [DATA_WIDTH-1:0] w_o_load_data;
 
@@ -79,74 +82,164 @@ module KVCache #(
   logic [INDEX_WIDTH-1:0]       r_index;
   logic [LINEOFFSET_WIDTH-1:0]  r_lineoffset;
 
-  // Hit Check
-  // Rename Signal
+  logic [LINEOFFSET_WIDTH-1:0]  w_lineoffset_internal;
+  logic [LINEOFFSET_WIDTH-1:0]  r_lineoffset_internal;
+  logic                         w_miss_internal;
+  logic                         r_miss_internal;
+
+  // Signals for Hit Check Stage
+  logic                         w_hitcheck_cke;
+  logic                         w_hitcheck_valid;
+  logic                         r_hitcheck_valid;
+  logic                         w_hitcheck_ready;
+  logic [WAY_NUM-1:0]           w_hitcheck_hitway;
+  logic [WAY_NUM-1:0]           r_hitcheck_hitway;
+  logic                         w_hitcheck_miss;
+  logic                         r_hitcheck_miss;
+  logic [TAG_WIDTH-1:0]         w_hitcheck_tag;
+  logic [TAG_WIDTH-1:0]         r_hitcheck_tag;
+  logic [INDEX_WIDTH-1:0]       w_hitcheck_index;
+  logic [INDEX_WIDTH-1:0]       r_hitcheck_index;
+  logic [LINEOFFSET_WIDTH-1:0]  w_hitcheck_lineoffset;
+  logic [LINEOFFSET_WIDTH-1:0]  r_hitcheck_lineoffset;
+  logic [ADDR_WIDTH-1:0]        w_hitcheck_addr;
+  logic [ADDR_WIDTH-1:0]        r_hitcheck_addr;
+  logic                         w_i_load_valid;
+  logic                         r_i_load_valid;
+
+  // Signals for Fetch Stage
+  logic                         w_fetch_cke;
+
+  // Hit Check Stage
+  // Handshake Logic
   always_comb begin
-    if(~o_fetch_valid | i_fetch_ready) begin
-      w_tag             = i_load_addr[ADDR_WIDTH-1:ADDR_WIDTH-TAG_WIDTH];
-      w_index           = i_load_addr[INDEX_WIDTH+LINEOFFSET_WIDTH-1:LINEOFFSET_WIDTH];
-      w_lineoffset      = i_load_addr[LINEOFFSET_WIDTH-1:0];
+    w_hitcheck_ready    = i_fetch_ready & w_load_ready; // be careful !! w_load_ready is not implemented!!!
+    w_hitcheck_cke      = ~r_i_load_valid | w_hitcheck_ready;
+    o_load_ready        = w_hitcheck_cke;
+    if(w_hitcheck_cke) begin
+      w_i_load_valid    = i_load_valid;
+      w_hitcheck_valid  = i_load_valid & ~w_hitcheck_miss;
+      w_o_fetch_valid   = i_load_valid & w_hitcheck_miss;
     end else begin
-      w_tag             = r_tag;
-      w_index           = r_index;
-      w_lineoffset      = r_lineoffset;
+      w_i_load_valid    = r_i_load_valid;
+      w_hitcheck_valid  = r_hitcheck_valid;
+      w_o_fetch_valid   = o_fetch_valid;
     end
   end
 
   always_ff @(posedge i_clk) begin
-    r_tag           <=  w_tag;
-    r_index         <=  w_index;
-    r_lineoffset    <=  w_lineoffset;
+    r_i_load_valid      <= w_i_load_valid;
+    r_hitcheck_valid    <= w_hitcheck_valid;
+    o_fetch_valid       <= w_o_fetch_valid;
   end
 
   // Hit Check Logic
   generate 
     for(genvar way = 0; way < WAY_NUM; way = way + 1) begin : HIT_CHECK_LOGIC
       always_comb begin
-        if(~o_fetch_valid | i_fetch_ready) begin
-          w_hitway[way] = r_cache_valid[way][w_index] & (r_cache_tag[way][w_index] == w_tag);
+        if(w_hitcheck_cke) begin
+          w_hitcheck_hitway[way]    = r_cache_valid[way][w_hitcheck_index] & (r_cache_tag[way][w_hitcheck_index] == w_hitcheck_tag);
         end else begin
-          w_hitway[way] = r_hitway[way];
+          w_hitcheck_hitway[way]    = r_hitcheck_hitway[way];
         end
       end
     end
   endgenerate
   always_comb begin
-    if(~o_fetch_valid | i_fetch_ready) begin
-      w_miss = ~|w_hitway;
+    if(w_hitcheck_cke) begin
+      w_hitcheck_miss   = ~|w_hitcheck_hitway;
     end else begin
-      w_miss = r_miss;
+      w_hitcheck_miss   = r_hitcheck_miss;
     end
   end
 
   always_ff @(posedge i_clk) begin
-    r_hitway        <=  w_hitway;
-    r_miss          <=  w_miss;
+    r_hitcheck_hitway   <=  w_hitcheck_hitway;
+    r_hitcheck_miss     <=  w_hitcheck_miss;
   end
 
-  // Send Address to Address
+  // Send Address to Fetch Stage
   always_comb begin
-    if((~o_fetch_valid | i_fetch_ready) && w_miss) begin
-      w_o_fetch_addr    = i_load_addr;
-      w_o_fetch_valid   = i_load_valid;
+    if(w_hitcheck_cke) begin
+      w_hitcheck_addr    = i_load_addr;
     end else begin
-      w_o_fetch_valid   = o_fetch_valid;
-      w_o_fetch_addr    = o_fetch_addr;
+      w_hitcheck_addr    = r_hitcheck_addr;
     end
   end
 
   always_ff @(posedge i_clk) begin
-    o_fetch_valid   <= w_o_fetch_valid;
-    o_fetch_addr    <= w_o_fetch_addr;
+    o_fetch_addr    <= w_hitcheck_addr;
+    r_hitcheck_addr <= w_hitcheck_addr; // nanika ni tsukau kamo
   end
 
+  // Send Address to Load Stage
+  always_comb begin
+    if(w_hitcheck_cke) begin
+      w_hitcheck_tag        = i_load_addr[ADDR_WIDTH-1:ADDR_WIDTH-TAG_WIDTH];
+      w_hitcheck_index      = i_load_addr[INDEX_WIDTH+LINEOFFSET_WIDTH-1:LINEOFFSET_WIDTH];
+      w_hitcheck_lineoffset = i_load_addr[LINEOFFSET_WIDTH-1:0];
+    end else begin
+      w_hitcheck_tag        = r_hitcheck_tag;
+      w_hitcheck_index      = r_hitcheck_index;
+      w_hitcheck_lineoffset = r_hitcheck_lineoffset;
+    end
+  end
 
-  // Fetch
-  // Store Data to Cache
+  always_ff @(posedge i_clk) begin
+    r_hitcheck_tag          <= w_hitcheck_tag;
+    r_hitcheck_index        <= w_hitcheck_index;
+    r_hitcheck_lineoffset   <= w_hitcheck_lineoffset;
+  end
+
+  // Fetch Stage
+  // Handshake Logic
+  always_comb begin
+
+  end
+
+  always_ff @(posedge i_clk) begin
+  end
+
+  always_comb begin
+    if(~i_fetch_valid | w_hitcheck_ready) begin
+      w_lineoffset_internal = r_lineoffset;
+      w_miss_internal       = r_miss;
+    end else begin
+      w_lineoffset_internal = r_lineoffset_internal;
+      w_miss_internal       = r_miss_internal;
+    end
+  end
+
+  always_ff @(posedge i_clk) begin
+    r_lineoffset_internal <= w_lineoffset_internal;
+    r_miss_internal <= w_miss_internal;
+  end
+
+  // Load Stage
+  // Load Logic 
+  generate
+    for(genvar way = 0; way < WAY_NUM; way = way + 1) begin : LOAD_LOGIC
+      always_comb begin
+        w_rdataway[way] = r_cache_line[way][r_index][r_lineoffset];
+      end
+    end
+  endgenerate
+
+  // Select Hit Data
+  KVPriorityTree #(
+    .DATA_WIDTH (DATA_WIDTH ),
+    .DATA_NUM   (WAY_NUM    )
+  ) SelectReadDataWay (
+    .i_datas    (w_rdataway ),
+    .i_valid    (r_hitway   ),
+    .o_data     (w_rdata    )
+  );
+
+  // Store Data to Cache from Memory
   generate
     for(genvar way = 0; way < WAY_NUM; way = way + 1) begin : FETCH_LOGIC
       always_comb begin
-        if(r_miss && r_killmask[way] && (~o_load_valid | i_load_ready)) begin
+        if(r_miss_internal && r_killmask[way] && o_fetch_ready) begin
           w_cache_valid[way]    = i_fetch_valid;
           w_cache_tag[way]      = r_tag;
           w_cache_line[way]     = i_fetch_data;
@@ -169,28 +262,6 @@ module KVCache #(
     end
   endgenerate
 
-  // Send Data to Processor
-  always_comb begin
-    if(~o_load_valid | i_load_ready) begin
-      if(r_miss) begin
-        w_o_load_data   = i_fetch_data[r_lineoffset];
-        w_o_load_valid  = i_fetch_valid;
-      end else begin
-        w_o_load_data   = w_rdata;
-        w_o_load_valid  = i_load_valid;
-      end
-    end else begin
-      w_o_load_data     = o_load_data;
-      w_o_load_valid    = o_load_valid;
-    end
-  end
-
-  always_ff @(posedge i_clk) begin
-    o_load_data     <= w_o_load_data;
-    o_load_valid    <= w_o_load_valid;
-  end
-
-  
   // Cache Algorithm
   generate 
     if(WAY_NUM < 2) begin
@@ -208,25 +279,28 @@ module KVCache #(
     r_killmask  <= w_killmask;
   end
 
-  // Load Logic 
-  generate
-    for(genvar way = 0; way < WAY_NUM; way = way + 1) begin : LOAD_LOGIC
-      always_comb begin
-        w_rdataway[way] = r_cache_line[way][r_index][r_lineoffset];
+  // Send Data to Processor
+  always_comb begin
+    w_hitcheck_ready = ~o_load_valid | i_load_ready;
+    o_fetch_ready = ~o_load_valid | i_load_ready;
+    if(~o_load_valid || i_load_ready) begin
+      if(r_miss_internal) begin
+        w_o_load_data   = i_fetch_data[r_lineoffset_internal];
+        w_o_load_valid  = i_fetch_valid;
+      end else begin
+        w_o_load_data   = w_rdata; 
+        w_o_load_valid  = r_hitcheck_valid;
       end
+    end else begin
+      w_o_load_data     = o_load_data;
+      w_o_load_valid    = o_load_valid;
     end
-  endgenerate
+  end
 
-  // Extract Hit Data
-  KVPriorityTree #(
-    .DATA_WIDTH (DATA_WIDTH ),
-    .DATA_NUM   (WAY_NUM    )
-  ) SelectReadDataWay (
-    .i_datas    (w_rdataway ),
-    .i_valid    (w_hitway   ),
-    .o_data     (w_rdata    )
-  );
-
+  always_ff @(posedge i_clk) begin
+    o_load_data     <= w_o_load_data;
+    o_load_valid    <= w_o_load_valid;
+  end
 
   // Store Logic
   always_comb begin
