@@ -42,17 +42,9 @@ module KVCache #(
   output logic [LINE_WIDTH-1:0] o_line_data
 );
 
-  logic                  w_i_load_valid;
-  logic                  r_i_load_valid;
-
   logic                  w_o_fetch_ready;
   logic [ADDR_WIDTH-1:0] w_o_fetch_addr;
   logic                  w_o_fetch_valid;
-
-  logic               w_miss;
-  logic               r_miss;
-  logic [WAY_NUM-1:0] w_hitway;
-  logic [WAY_NUM-1:0] r_hitway;
 
   logic [DATA_WIDTH-1:0] w_rdata;
   logic [DATA_WIDTH-1:0] w_rdataway[WAY_NUM-1:0];
@@ -110,8 +102,8 @@ module KVCache #(
   logic                         r_fetch_valid;
   logic [LINEOFFSET_WIDTH-1:0]  w_fetch_lineoffset;
   logic [LINEOFFSET_WIDTH-1:0]  r_fetch_lineoffset;
-  logic [DATA_WIDTH-1:0]        w_load_data;
-  logic [DATA_WIDTH-1:0]        r_load_data;
+  logic [DATA_WIDTH-1:0]        w_load_data[LINE_SIZE-1:0];
+  logic [DATA_WIDTH-1:0]        r_load_data[LINE_SIZE-1:0];
 
   // Signals for Load Stage
   logic                         w_load_cke;
@@ -128,8 +120,10 @@ module KVCache #(
     o_load_ready        = w_hitcheck_cke;
     if(w_hitcheck_cke) begin
       w_i_load_valid    = i_load_valid;
-      w_hitcheck_valid  = i_load_valid & ~w_hitcheck_miss;
-      w_o_fetch_valid   = i_load_valid & w_hitcheck_miss;
+      w_hitcheck_valid  = i_load_valid;
+      w_o_fetch_valid   = i_load_valid;
+      //w_hitcheck_valid  = i_load_valid & ~w_hitcheck_miss;
+      //w_o_fetch_valid   = i_load_valid & w_hitcheck_miss;
     end else begin
       w_i_load_valid    = r_i_load_valid;
       w_hitcheck_valid  = r_hitcheck_valid;
@@ -139,8 +133,8 @@ module KVCache #(
 
   always_ff @(posedge i_clk) begin
     r_i_load_valid      <= w_i_load_valid;
-    r_hitcheck_valid    <= w_hitcheck_valid;
-    o_fetch_valid       <= w_o_fetch_valid;
+    r_hitcheck_valid    <= w_hitcheck_valid & ~w_hitcheck_miss;
+    o_fetch_valid       <= w_o_fetch_valid & w_hitcheck_miss;
   end
 
   // Hit Check Logic
@@ -221,7 +215,7 @@ module KVCache #(
   always_comb begin
     if(w_fetch_cke) begin
       w_fetch_lineoffset    = r_hitcheck_lineoffset;
-      w_load_data           = i_fetch_data[r_hitcheck_lineoffset];
+      w_load_data           = i_fetch_data;
     end else begin
       w_fetch_lineoffset    = r_fetch_lineoffset;
       w_load_data           = r_load_data;
@@ -237,7 +231,7 @@ module KVCache #(
   generate
     for(genvar way = 0; way < WAY_NUM; way = way + 1) begin : FETCH_LOGIC
       always_comb begin
-        if(r_killmask[way] && w_fetch_cke) begin
+        if(i_fetch_valid && r_killmask[way] && w_fetch_cke) begin
           w_cache_valid[way]    = i_fetch_valid;
           w_cache_tag[way]      = r_hitcheck_tag;
           w_cache_line[way]     = i_fetch_data;
