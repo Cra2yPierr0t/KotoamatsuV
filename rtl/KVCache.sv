@@ -108,6 +108,8 @@ module KVCache #(
   logic                         w_fetch_cke;
   logic                         w_fetch_valid;
   logic                         r_fetch_valid;
+  logic [LINEOFFSET_WIDTH-1:0]  w_fetch_lineoffset;
+  logic [LINEOFFSET_WIDTH-1:0]  r_fetch_lineoffset;
   logic [DATA_WIDTH-1:0]        w_load_data;
   logic [DATA_WIDTH-1:0]        r_load_data;
 
@@ -218,14 +220,17 @@ module KVCache #(
   // Send Data to Load Stage
   always_comb begin
     if(w_fetch_cke) begin
-      w_load_data   = i_fetch_data[r_hitcheck_lineoffset];
+      w_fetch_lineoffset    = r_hitcheck_lineoffset;
+      w_load_data           = i_fetch_data[r_hitcheck_lineoffset];
     end else begin
-      w_load_data   = r_load_data;
+      w_fetch_lineoffset    = r_fetch_lineoffset;
+      w_load_data           = r_load_data;
     end
   end
 
   always_ff @(posedge i_clk) begin
-    r_load_data <= w_load_data;
+    r_fetch_lineoffset  <= w_fetch_lineoffset;
+    r_load_data         <= w_load_data;
   end
 
   // Store Data to Cache from Memory
@@ -311,16 +316,13 @@ module KVCache #(
   // Send Data to Processor
   always_comb begin
     if(w_load_cke) begin
-      if() begin
-        w_o_load_data   = i_fetch_data[r_lineoffset_internal];
-        w_o_load_valid  = i_fetch_valid;
+      if(r_fetch_valid) begin
+        w_o_load_data   = r_load_data[r_fetch_lineoffset];
       end else begin
         w_o_load_data   = w_rdata; 
-        w_o_load_valid  = r_hitcheck_valid;
       end
     end else begin
       w_o_load_data     = o_load_data;
-      w_o_load_valid    = o_load_valid;
     end
   end
 
