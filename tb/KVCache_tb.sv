@@ -86,6 +86,23 @@ module KVCache_tb;
     #2
     wait(o_load_ready);
     i_load_valid    = '0;
+    #20
+    i_load_valid    = '1;
+    #2
+    wait(o_load_ready);
+    i_load_valid    = '0;
+    #20
+    i_load_addr     = 32'h1111_1004;
+    i_load_valid    = '1;
+    #2
+    wait(o_load_ready);
+    i_load_valid    = '0;
+    #20
+    i_load_addr     = 32'h1111_1002;
+    i_load_valid    = '1;
+    #2
+    wait(o_load_ready);
+    i_load_valid    = '0;
     #100
     $finish;
   end
