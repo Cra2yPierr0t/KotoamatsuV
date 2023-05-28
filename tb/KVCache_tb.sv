@@ -62,6 +62,16 @@ module KVCache_tb;
     .o_line_data    ()
   );
 
+  KVMemory_beh Memory_beh (
+    .i_clk          (i_clk          ),
+    .i_rstn         (i_rstn         ),
+    .i_read_addr    (o_fetch_addr   ),
+    .i_read_valid   (o_fetch_valid  ),
+    .o_read_ready   (i_fetch_ready  ),
+    .o_read_data    (i_fetch_data   ),
+    .o_read_valid   (i_fetch_valid  ),
+    .i_read_ready   (o_fetch_ready  )
+  );
   
   initial begin
     $dumpfile("wave.vcd");
@@ -69,17 +79,13 @@ module KVCache_tb;
   end
 
   initial begin
-    i_fetch_data[0] = 32'h0000_5555;
-    i_fetch_data[1] = 32'h5555_0000;
-    i_fetch_data[2] = 32'h5555_5555;
-    i_fetch_data[3] = 32'h0505_0505;
     #10
-    i_load_valid    = '1;
-    i_load_addr     = 32'h1000_1000;
     i_load_ready    = '1;
-    i_fetch_ready   = '1;
-    #10
-    i_fetch_valid   = '1;
+    i_load_addr     = 32'h1111_1001;
+    i_load_valid    = '1;
+    #2
+    wait(o_load_ready);
+    i_load_valid    = '0;
     #100
     $finish;
   end
