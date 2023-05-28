@@ -113,30 +113,6 @@ module KVCache #(
 
 
   // Hit Check Stage
-  // Handshake Logic
-  always_comb begin
-    w_hitcheck_ready    = i_fetch_ready & w_load_ready;
-    w_hitcheck_cke      = ~r_i_load_valid | w_hitcheck_ready;
-    o_load_ready        = w_hitcheck_cke;
-    if(w_hitcheck_cke) begin
-      w_i_load_valid    = i_load_valid;
-      w_hitcheck_valid  = i_load_valid;
-      w_o_fetch_valid   = i_load_valid;
-      //w_hitcheck_valid  = i_load_valid & ~w_hitcheck_miss;
-      //w_o_fetch_valid   = i_load_valid & w_hitcheck_miss;
-    end else begin
-      w_i_load_valid    = r_i_load_valid;
-      w_hitcheck_valid  = r_hitcheck_valid;
-      w_o_fetch_valid   = o_fetch_valid;
-    end
-  end
-
-  always_ff @(posedge i_clk) begin
-    r_i_load_valid      <= w_i_load_valid;
-    r_hitcheck_valid    <= w_hitcheck_valid & ~w_hitcheck_miss;
-    o_fetch_valid       <= w_o_fetch_valid & w_hitcheck_miss;
-  end
-
   // Hit Check Logic
   generate 
     for(genvar way = 0; way < WAY_NUM; way = way + 1) begin : HIT_CHECK_LOGIC
@@ -149,18 +125,42 @@ module KVCache #(
       end
     end
   endgenerate
+
   always_comb begin
     if(w_hitcheck_cke) begin
       w_hitcheck_miss   = ~|w_hitcheck_hitway;
+      w_hitcheck_valid  = i_load_valid & ~w_hitcheck_miss;
+      w_o_fetch_valid   = i_load_valid & w_hitcheck_miss;
     end else begin
       w_hitcheck_miss   = r_hitcheck_miss;
+      w_hitcheck_valid  = r_hitcheck_valid;
+      w_o_fetch_valid   = o_fetch_valid;
     end
   end
 
   always_ff @(posedge i_clk) begin
     r_hitcheck_hitway   <=  w_hitcheck_hitway;
     r_hitcheck_miss     <=  w_hitcheck_miss;
+    r_hitcheck_valid    <= w_hitcheck_valid;
+    o_fetch_valid       <= w_o_fetch_valid;
   end
+
+  // Handshake Logic
+  always_comb begin
+    w_hitcheck_ready    = i_fetch_ready & w_load_ready;
+    w_hitcheck_cke      = ~r_i_load_valid | w_hitcheck_ready;
+    o_load_ready        = w_hitcheck_cke;
+    if(w_hitcheck_cke) begin
+      w_i_load_valid    = i_load_valid;
+    end else begin
+      w_i_load_valid    = r_i_load_valid;
+    end
+  end
+
+  always_ff @(posedge i_clk) begin
+    r_i_load_valid      <= w_i_load_valid;
+  end
+
 
   // Send Address to Fetch Stage
   always_comb begin
