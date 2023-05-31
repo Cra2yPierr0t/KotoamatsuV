@@ -9,6 +9,11 @@ KVMemory_beh:
 KVPriorityTree:
 	verilator --binary --trace KVPriorityTree_tb.sv ../rtl/KVPriorityTree.sv
 	cd obj_dir ; ./VKVPriorityTree_tb
+
+KVSelectInvalidWay:
+	verilator --binary --trace KVSelectInvalidWay_tb.sv ../rtl/KVSelectInvalidWay.sv
+	cd obj_dir ; ./VKVSelectInvalidWay_tb
+
 clean:
 	rm -r obj_dir
 
