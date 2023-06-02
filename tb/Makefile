@@ -14,6 +14,10 @@ KVSelectInvalidWay:
 	verilator --binary --trace KVSelectInvalidWay_tb.sv ../rtl/KVSelectInvalidWay.sv
 	cd obj_dir ; ./VKVSelectInvalidWay_tb
 
+KVLRU:
+	verilator --binary --trace KVLRU_tb.sv ../rtl/KVLRU.sv
+	cd obj_dir ; ./VKVLRU_tb
+
 clean:
 	rm -r obj_dir
 

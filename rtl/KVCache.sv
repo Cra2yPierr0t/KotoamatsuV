@@ -1,7 +1,7 @@
 module KVCache #(
   parameter DATA_WIDTH  = 32,
   parameter ADDR_WIDTH  = 32,
-  parameter WAY_NUM     = 2,
+  parameter WAY_NUM     = 4,
   parameter LINE_SIZE   = 4,
   parameter LINE_NUM    = 64,
   localparam LINEOFFSET_WIDTH = $clog2(LINE_SIZE),
@@ -111,6 +111,13 @@ module KVCache #(
   logic                         w_o_load_valid;
   logic [DATA_WIDTH-1:0]        w_o_load_data;
 
+  // Signals for Cache Algorithm
+  logic [WAY_NUM-1:0]           w_valid_way;
+  logic [WAY_NUM-1:0]           w_lru_array[WAY_NUM-1:0];
+  logic [WAY_NUM-1:0]           r_lru_array[WAY_NUM-1:0];
+  logic [WAY_NUM-2:0]           w_lru_array_row;
+  logic [WAY_NUM-1:0]           w_invalid_killmask;
+
 
   // Hit Check Stage
   // Hit Check Logic
@@ -195,6 +202,54 @@ module KVCache #(
     r_hitcheck_lineoffset   <= w_hitcheck_lineoffset;
   end
 
+  // Cache Algorithm
+  generate
+    for(genvar way = 0; way < WAY_NUM; way = way + 1) begin : CHECK_INVALID_WAY
+      always_comb begin
+        w_valid_way[way]    = r_cache_valid[way][w_hitcheck_index];
+      end
+    end
+  endgenerate
+
+
+  always_comb begin
+    if(&w_valid_way) begin  // All line is valid
+      if(|w_lru_array_row) begin
+        w_killmask  = {1'b0, w_lru_array_row};
+      end else begin
+        w_killmask  = {1'b1, w_lru_array_row};
+      end
+    end else begin
+      w_killmask    = w_invalid_killmask;
+    end
+  end
+
+  always_ff @(posedge i_clk) begin
+    r_killmask  <= w_killmask;
+  end
+
+  KVSelectInvalidWay #(
+    .WAY_NUM    (WAY_NUM    )
+  ) SelectInvalidWay (
+    .i_valid_way    (w_valid_way        ),
+    .o_killmask     (w_invalid_killmask )
+  );
+
+  // Old Cache Algorithm
+  /*
+  generate 
+    if(WAY_NUM < 2) begin
+      always_comb begin
+        w_killmask <= r_killmask;
+      end
+    end else begin
+      always_comb begin
+        w_killmask = {r_killmask[WAY_NUM-2:0], r_killmask[WAY_NUM-1]};
+      end
+    end
+  endgenerate
+  */
+
   // Fetch Stage
   // Handshake Logic
   always_comb begin
@@ -253,23 +308,6 @@ module KVCache #(
       end
     end
   endgenerate
-
-  // Cache Algorithm
-  generate 
-    if(WAY_NUM < 2) begin
-      always_comb begin
-        w_killmask <= r_killmask;
-      end
-    end else begin
-      always_comb begin
-        w_killmask = {r_killmask[WAY_NUM-2:0], r_killmask[WAY_NUM-1]};
-      end
-    end
-  endgenerate
-
-  always_ff @(posedge i_clk) begin
-    r_killmask  <= w_killmask;
-  end
 
 
   // Load Stage
