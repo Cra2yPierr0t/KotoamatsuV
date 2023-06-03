@@ -20,7 +20,7 @@ module KVLRU #(
   logic [WAY_NUM-1:0] r_uso_killmask;
 
   logic [1:0] w_lru_array[3:0];
-  logic [1:0] r_lru_array[LINE_NUM_PER_WAY][3:0];
+  logic [1:0] r_lru_array[LINE_NUM_PER_WAY-1:0][3:0];
 
   logic w_miss;
   logic [WAY_NUM-1:0] w_all_zero_check;
@@ -63,7 +63,7 @@ module KVLRU #(
 
   generate for(genvar way = 0; way < WAY_NUM; way = way + 1) begin
     always_comb begin
-      if(~|r_uso_killmask) begin    // all uso killmask is zero
+      if(~|w_uso_killmask) begin    // all uso killmask is zero
         if(way == 0) begin
           if(w_all_zero) begin
             w_killmask[way]   = 1'b1;
@@ -77,7 +77,7 @@ module KVLRU #(
             w_killmask[way]   = 1'b0;
             w_lru_array[way]    = 1;
           end else begin
-            if(r_lru_array[i_index][way-1] == 0) begin
+            if(r_lru_array[i_index][way-1] == '0) begin
               w_killmask[way]   = 1'b1;
               w_lru_array[way]  = '0;
             end else begin
@@ -116,6 +116,7 @@ module KVLRU #(
 
   always_comb begin
     o_killmask  = w_killmask;
+    debug_lru_array = r_lru_array[i_index];
   end
 
 endmodule

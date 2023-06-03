@@ -24,6 +24,8 @@ module KVSelectInvalidWay_tb;
 
   initial begin
     #20
+    i_index = 4'b0001;
+    #20
     $finish;
   end
 endmodule
