@@ -13,9 +13,9 @@ module KVLRU #(
 );
 
   logic [WAY_NUM-1:0] w_killmask;
-  logic [WAY_NUM-2:0] w_lru_array_row;
-  logic [WAY_NUM-1:0] w_lru_array[WAY_NUM-1:0];
-  logic [WAY_NUM-1:0] r_lru_array[LINE_NUM_PER_WAY-1:0][WAY_NUM-1:0];
+
+  logic [1:0] w_lru_array[3:0];
+  logic [1:0] r_lru_array[3:0][LINE_NUM_PER_WAY-1:0];
 
   function [$clog2(WAY_NUM)-1:0] bit2index(input [WAY_NUM-1:0] bits);
     bit [$clog2(WAY_NUM):0] way;
@@ -27,47 +27,45 @@ module KVLRU #(
     return ($clog2(WAY_NUM))'(WAY_NUM-1);
   endfunction
 
-  generate
-    for(genvar way = 0; way < WAY_NUM; way = way + 1) begin : UPDATE_LRU_ARRAY0
-      always_comb begin
-        if(bit2index(i_hitway) == way) begin
-          w_lru_array[bit2index(i_hitway)] = '0;
-        end else begin
-          w_lru_array[way][bit2index(i_hitway)] = 1'b1;
-        end
-      end
-    end
-  endgenerate
-
-  generate
-    for(genvar way = 0; way < WAY_NUM; way = way + 1) begin : UPDATE_LRU_ARRAY1
-      always_ff @(posedge i_clk) begin
-        if(bit2index(i_hitway) == way) begin
-          r_lru_array[i_index][bit2index(i_hitway)] = w_lru_array[bit2index(i_hitway)];
-        end else begin
-          r_lru_array[i_index][way][bit2index(i_hitway)] = w_lru_array[way][bit2index(i_hitway)];
-        end
-      end
-    end
-  endgenerate
-
-  generate
-    for(genvar way = 0; way < WAY_NUM-1; way = way + 1) begin : SELECT_OLD_WAY
-      always_comb begin
-        w_lru_array_row[way] = &r_lru_array[i_index][way][WAY_NUM-1:way+1];
-      end
-    end
-  endgenerate
-  
   always_comb begin
-    if(|w_lru_array_row) begin
-      w_killmask  = {1'b0, w_lru_array_row};
+    if(i_hitway = 4'b0000) begin
+      w_killmask = 4'b0001;
     end else begin
-      w_killmask  = {1'b1, w_lru_array_row};
+
     end
   end
+
+  generate
+    for(genvar way = 0; way < WAY_NUM; way = way + 1) begin
+      always_comb begin
+        if(r_lru_array[i_index][way] == 2'b11) begin
+          w_killmask[way]   = 1'b1;
+        end else begin
+          w_killmask[way]   = 1'b0;
+        end
+      end
+    end
+  endgenerate
+
+  generate
+    for(genvar way = 0; way < WAY_NUM; way = way + 1) begin
+      always_comb begin
+        if(i_hitway == 4'b0000) begin
+        end else begin
+          if(i_hitway[way]) begin
+            w_lru_array[way] = 2'b00;
+          end else begin
+            w_lru_array[way] = r_lru_array[i_index][way] + 2'b01;
+          end
+        end
+      end
+    end
+  endgenerate
 
   always_ff @(posedge i_clk) begin
+    r_lru_array[i_index]    <= w_lru_array;
+    o_killmask              <= w_killmask;
   end
+
 
 endmodule
