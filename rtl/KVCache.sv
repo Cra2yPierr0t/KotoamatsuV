@@ -113,9 +113,7 @@ module KVCache #(
 
   // Signals for Cache Algorithm
   logic [WAY_NUM-1:0]           w_valid_way;
-  logic [WAY_NUM-1:0]           w_lru_array[WAY_NUM-1:0];
-  logic [WAY_NUM-1:0]           r_lru_array[WAY_NUM-1:0];
-  logic [WAY_NUM-2:0]           w_lru_array_row;
+  logic [WAY_NUM-1:0]           w_lru_killmask;
   logic [WAY_NUM-1:0]           w_invalid_killmask;
 
 
@@ -211,14 +209,20 @@ module KVCache #(
     end
   endgenerate
 
+  KVLRU #(
+    .WAY_NUM    (WAY_NUM    ),
+    .LINE_NUM   (LINE_NUM   )
+  ) LRU (
+    .i_clk      (i_clk              ),
+    .i_rstn     (),
+    .i_hitway   (w_hitcheck_hitway  ),
+    .i_index    (w_hitcheck_index   ),
+    .o_killmask (w_lru_killmask     )
+  );
 
   always_comb begin
     if(&w_valid_way) begin  // All line is valid
-      if(|w_lru_array_row) begin
-        w_killmask  = {1'b0, w_lru_array_row};
-      end else begin
-        w_killmask  = {1'b1, w_lru_array_row};
-      end
+      w_killmask    = w_lru_killmask;
     end else begin
       w_killmask    = w_invalid_killmask;
     end
@@ -234,21 +238,6 @@ module KVCache #(
     .i_valid_way    (w_valid_way        ),
     .o_killmask     (w_invalid_killmask )
   );
-
-  // Old Cache Algorithm
-  /*
-  generate 
-    if(WAY_NUM < 2) begin
-      always_comb begin
-        w_killmask <= r_killmask;
-      end
-    end else begin
-      always_comb begin
-        w_killmask = {r_killmask[WAY_NUM-2:0], r_killmask[WAY_NUM-1]};
-      end
-    end
-  endgenerate
-  */
 
   // Fetch Stage
   // Handshake Logic
