@@ -35,11 +35,10 @@ module KVCache #(
   output logic                  o_fetch_valid,
   input  logic                  i_fetch_ready,
   // Write
-  input  logic                  i_line_valid,
-  output logic                  o_line_ready,
-  input  logic [LINE_WIDTH-1:0] i_line_data,
-  output logic [ADDR_WIDTH-1:0] o_line_addr,
-  output logic [LINE_WIDTH-1:0] o_line_data
+  output logic [DATA_WIDTH-1:0] o_write_data[LINE_SIZE-1:0],
+  output logic [ADDR_WIDTH-1:0] o_write_addr,
+  output logic                  o_write_valid,
+  input  logic                  i_write_ready
 );
 
   logic                  w_o_fetch_ready;

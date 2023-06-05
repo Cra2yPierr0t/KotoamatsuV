@@ -55,11 +55,10 @@ module KVCache_tb;
     .o_fetch_valid  (o_fetch_valid  ),
     .i_fetch_ready  (i_fetch_ready  ),
     // Write
-    .i_line_valid   (),
-    .o_line_ready   (),
-    .i_line_data    (),
-    .o_line_addr    (),
-    .o_line_data    ()
+    .o_write_data   (),
+    .o_write_addr   (),
+    .o_write_valid  (),
+    .i_write_ready  ()
   );
 
   KVMemory_beh Memory_beh (
